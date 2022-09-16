@@ -5,11 +5,12 @@ description = ""
 authors = ["Aditya Wardianto <83759122+ditw11mhs@users.noreply.github.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.9.7 || >3.9.7,<4.0"
+python = ">=3.9,<3.9.7 || >3.9.7,<3.12"
 streamlit = "^1.12.2"
 numpy = "^1.23.3"
 plotly = "^5.10.0"
 pandas = "^1.4.4"
+scipy = "^1.9.1"
 
 [tool.poetry.dev-dependencies]
 
