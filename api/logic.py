@@ -73,7 +73,7 @@ def compute_cwt(
         )
         scale = np.flip(scale, axis=0).astype(
             "float32"
-        )  # <- This makes an decreasing scale
+        )  # <- This makes a decreasing scale
     st.success("Preparation Done!")
 
     # Create a 2d matrix of wavelet using 2d matrix of t as an input
@@ -94,8 +94,9 @@ def compute_cwt(
     st.success("Last CWT Done!")
 
     frequency_scale = 0.849 / scale
+    print(frequency_scale)
     return (
-        cwt,
+            cwt[::-1,::-1],
         frequency_scale.reshape(
             -1,
         ),

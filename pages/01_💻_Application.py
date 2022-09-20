@@ -47,10 +47,14 @@ def main():
                     scale_limit_up=scale_limit_up,
                     scale_limit_down=scale_limit_down,
                 )
-                # fig_heatmap = go.Figure(data=go.Contour(x=time, y=scale, z=cwt))
-                # st.plotly_chart(fig_heatmap)
-                fig_3d = go.Figure(data=go.Surface(x=time, y=scale, z=cwt))
+                fig_heatmap = go.Figure(data=go.Contour(x=time, z=cwt))
+                st.plotly_chart(fig_heatmap)
+                fig_3d = go.Figure(data=go.Surface(x=time, z=cwt))
+                fig_3d.update_traces(
+                    contours_z=dict(show=True, usecolormap=True, project_z=True)
+                )
                 st.plotly_chart(fig_3d)
+
 
 
 if __name__ == "__main__":
