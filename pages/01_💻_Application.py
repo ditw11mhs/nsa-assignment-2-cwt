@@ -47,9 +47,9 @@ def main():
                     scale_limit_up=scale_limit_up,
                     scale_limit_down=scale_limit_down,
                 )
-                fig_heatmap = go.Figure(data=go.Contour(x=time, y=scale, z=cwt))
+                # fig_heatmap = go.Figure(data=go.Contour(x=time, y=scale, z=cwt))
+                # st.plotly_chart(fig_heatmap)
                 fig_3d = go.Figure(data=go.Surface(x=time, y=scale, z=cwt))
-                st.plotly_chart(fig_heatmap)
                 st.plotly_chart(fig_3d)
 
 
