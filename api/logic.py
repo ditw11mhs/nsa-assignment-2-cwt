@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import streamlit as st
 from numba import jit, njit
 from scipy import signal
 
@@ -22,18 +23,23 @@ def complex_morlet_wavelet(t):
     # power_pi = np.power(np.pi,(-0.25))
     # Precomputation to further optimize calucaltion
 
-    w_o = 5.33442
-    power_pi = 0.75113
-    pre_compute = power_pi * np.exp((-np.square(t)) * 0.5)
-    w_re = pre_compute * np.cos(w_o * t)
-    w_im = pre_compute * np.sin(w_o * t)
-    return w_re, w_im
+    w_o = np.float32(5.33442)
+    power_pi = np.float32(0.75113)
+    pre_compute_pi_e = power_pi * np.exp((-np.square(t)) * 0.5).astype("float32")
+    pre_compute_wo_t = w_o * t
+
+    cos_matrix = np.cos(pre_compute_wo_t).astype("float32")
+    sin_matrix = np.sin(pre_compute_wo_t).astype("float32")
+    cos_sin_matrix = np.stack((cos_matrix, sin_matrix), axis=2)
+
+    w_matrix = np.expand_dims(pre_compute_pi_e, axis=2) * cos_sin_matrix
+    return w_matrix
 
 
 @njit
-def compute_t_matrix(wavelet_function, t, scale):
+def compute_t_matrix(t, scale):
     t_matrix = t / scale
-    return wavelet_function(t_matrix)
+    return t_matrix
 
 
 @jit(forceobj=True)
@@ -48,25 +54,32 @@ def compute_cwt(
     scale_limit_up,
     scale_limit_down=1e-12,
 ):
-    data = np.array(input_signal["Data"]).reshape(1, -1)
+    data = np.array(input_signal["Data"]).reshape(1, -1, 1).astype("float16")
     n_data = len(input_signal["Data"])
 
-    # Prepare variable to make a 2d matrix of t
-    dt = np.mean(input_signal["Time"])
-    t = np.arange(-n_data, n_data, dt).reshape(1, -1)
-    scale = np.arange(scale_limit_down, scale_limit_up, scale_resolution).reshape(-1, 1)
-    scale = np.flip(scale, axis=0)  # <- This makes an decreasing scale
-    print("Preparation Done!")
+    with st.spinner("Preparing Variables"):  # Prepare variable to make a 2d matrix of t
+        dt = np.mean(input_signal["Time"])
+        t = np.arange(-n_data, n_data, dt).reshape(1, -1).astype("float32")
+        scale = np.arange(scale_limit_down, scale_limit_up, scale_resolution).reshape(
+            -1, 1
+        )
+        scale = np.flip(scale, axis=0).astype(
+            "float32"
+        )  # <- This makes an decreasing scale
+    st.success("Preparation Done!")
 
     # Create a 2d matrix of wavelet using 2d matrix of t as an input
-    w_re_matrix, w_im_matrix = compute_t_matrix(wavelet_function, t, scale)
-    print("Wavelet Matrix Done!")
+    with st.spinner("Calculating Wavelet Matrix"):
+        t_matrix = compute_t_matrix(t, scale)
+        w_matrix = wavelet_function(t_matrix)
+    st.success("Wavelet Matrix Calculation Done!")
 
     # Calculate CWT using the correlation of data against each row of the wavelet matrix
-    cwt_re = numba_correlate(w_re_matrix, data, "valid")
-    print("CWT Real Done!")
-    cwt_im = numba_correlate(w_im_matrix, data, "valid")
-    print("CWT Imaginary Done!")
-    cwt = np.sqrt(np.square(cwt_re) + np.square(cwt_im)) / np.sqrt(scale)
-    print("Last CWT Done! \n")
-    return cwt
+    with st.spinner("Calculating CWT Matrix"):
+        cwt_matrix = numba_correlate(w_matrix, data, "valid")
+    st.success("CWT Matrix Calculation Done!")
+
+    with st.spinner("Calculating Magnitude"):
+        cwt = np.sqrt(np.sum(np.square(cwt_matrix), axis=2)) / np.sqrt(scale)
+    st.success("Last CWT Done!")
+    return cwt[::-1, ::-1]
