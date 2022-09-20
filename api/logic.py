@@ -29,7 +29,7 @@ def complex_morlet_wavelet(t):
     pre_compute_wo_t = w_o * t
 
     cos_matrix = np.cos(pre_compute_wo_t).astype("float32")
-    sin_matrix = np.sin(pre_compute_wo_t).astype("float32")
+    sin_matrix = -np.sin(pre_compute_wo_t).astype("float32")
     cos_sin_matrix = np.stack((cos_matrix, sin_matrix), axis=2)
 
     w_matrix = np.expand_dims(pre_compute_pi_e, axis=2) * cos_sin_matrix
@@ -55,11 +55,19 @@ def compute_cwt(
     scale_limit_down=1e-12,
 ):
     data = np.array(input_signal["Data"]).reshape(1, -1, 1).astype("float16")
+    time = np.array(input_signal["Time"])
     n_data = len(input_signal["Data"])
 
     with st.spinner("Preparing Variables"):  # Prepare variable to make a 2d matrix of t
-        dt = np.mean(input_signal["Time"])
-        t = np.arange(-n_data, n_data, dt).reshape(1, -1).astype("float32")
+        dt = np.mean(time)
+        t_dt = np.arange(-n_data, n_data, dt).reshape(1, -1).astype("float32")
+        # t = time.copy()
+        # t_reverse_negative = t[::-1] * -1
+        # t_calc = (
+        #     np.concatenate((t_reverse_negative[:-1], t))
+        #     .reshape(1, -1)
+        #     .astype("float32")
+        # )
         scale = np.arange(scale_limit_down, scale_limit_up, scale_resolution).reshape(
             -1, 1
         )
@@ -70,7 +78,7 @@ def compute_cwt(
 
     # Create a 2d matrix of wavelet using 2d matrix of t as an input
     with st.spinner("Calculating Wavelet Matrix"):
-        t_matrix = compute_t_matrix(t, scale)
+        t_matrix = compute_t_matrix(t_dt, scale)
         w_matrix = wavelet_function(t_matrix)
     st.success("Wavelet Matrix Calculation Done!")
 
@@ -81,5 +89,15 @@ def compute_cwt(
 
     with st.spinner("Calculating Magnitude"):
         cwt = np.sqrt(np.sum(np.square(cwt_matrix), axis=2)) / np.sqrt(scale)
+        padding = cwt.shape[1] - n_data
+        cwt = cwt[:, :-padding]
     st.success("Last CWT Done!")
-    return cwt[::-1, ::-1]
+
+    frequency_scale = 0.849 / scale
+    return (
+        cwt,
+        frequency_scale.reshape(
+            -1,
+        ),
+        input_signal["Time"],
+    )
