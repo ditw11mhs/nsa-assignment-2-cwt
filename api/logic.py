@@ -96,9 +96,116 @@ def compute_cwt(
     frequency_scale = 0.849 / scale
     print(frequency_scale)
     return (
-            cwt[::-1,::-1],
+        cwt[::-1, ::-1],
         frequency_scale.reshape(
             -1,
         ),
         input_signal["Time"],
     )
+
+
+def compute_cwt_threshold(
+    input_signal,
+    wavelet_function,
+    scale_resolution,
+    scale_limit_up,
+    scale_limit_down,
+    c_con,
+    t_start,
+    t_end,
+):
+    f = 1000
+    n_start = int(t_start * f)
+    n_end = int(t_end * f)
+    print(n_start)
+    data = np.array(input_signal["Data"]).reshape(1, -1, 1).astype("float16")
+    print(data.shape)
+    time = np.array(input_signal["Time"])
+    n_data = len(input_signal["Data"])
+
+    with st.spinner("Preparing Variables"):  # Prepare variable to make a 2d matrix of t
+        dt = np.mean(time)
+        t_dt = np.arange(-n_data, n_data, dt).reshape(1, -1).astype("float32")
+        scale = np.arange(scale_limit_down, scale_limit_up, scale_resolution).reshape(
+            -1, 1
+        )
+        scale = np.flip(scale, axis=0).astype(
+            "float32"
+        )  # <- This makes a decreasing scale
+    st.success("Preparation Done!")
+
+    # Create a 2d matrix of wavelet using 2d matrix of t as an input
+    with st.spinner("Calculating Wavelet Matrix"):
+        t_matrix = compute_t_matrix(t_dt, scale)
+        w_matrix = wavelet_function(t_matrix)
+    st.success("Wavelet Matrix Calculation Done!")
+
+    # Calculate CWT using the correlation of data against each row of the wavelet matrix
+    with st.spinner("Calculating CWT Matrix"):
+        cwt_matrix = numba_correlate(w_matrix, data, "valid")
+    st.success("CWT Matrix Calculation Done!")
+
+    with st.spinner("Calculating Magnitude"):
+        cwt = np.sqrt(np.sum(np.square(cwt_matrix), axis=2)) / np.sqrt(scale)
+        padding = cwt.shape[1] - n_data
+        cwt = cwt[:, :-padding]
+    st.success("Last CWT Done!")
+
+    threshold_mask = cwt > (np.min(cwt) + c_con * np.max(cwt))
+    thresholded_cwt = cwt * threshold_mask
+    frequency_scale = 10000 * 0.849 / scale
+    return (
+        thresholded_cwt[::-1, n_end:n_start:-1],
+        frequency_scale.reshape(
+            -1,
+        ),
+        time[n_start:n_end],
+    )
+
+
+def compute_shannon_envelope(x_df, window_size, c_env):
+    # Standardize input dimension
+    x_input = np.array(x_df["Data"])
+
+    # Normalized input signal with its absolute maximum value
+    x_norm = x_input / np.max(np.absolute(x_input))
+
+    # Precompute Shannon energy
+    x_norm_sq = np.square(x_norm)
+    shannon_nrg = -x_norm_sq * np.log(x_norm_sq)
+
+    # Apply moving average filter to make an average Shannon energy
+    avg_shannon = (
+        np.convolve(
+            shannon_nrg,
+            np.ones(
+                window_size,
+            ),
+            "full",
+        )[: -(window_size - 1)]
+        / window_size
+    )
+
+    # Compute Mean and Standard Deviation of average Shannon energy
+    mean_avg_shannon = np.mean(avg_shannon)
+    sdev_avg_shannon = np.sqrt(
+        np.sum(np.square(avg_shannon - mean_avg_shannon)) / window_size
+    )
+
+    # Calculate Shannon Envelope
+    shannon_env = (avg_shannon - mean_avg_shannon) / sdev_avg_shannon
+
+    # Threshold Shannon Envelope
+    threshold_mask = shannon_env > (np.min(shannon_env) + c_env * np.max(shannon_env))
+    shannon_thres = shannon_env * threshold_mask
+
+    output_df = pd.DataFrame(
+        data={
+            "Data": x_input,
+            "Threshold": threshold_mask * np.max(shannon_env),
+            "Shannon Envelope (thresholded)": shannon_thres,
+            "Shannon Envelope": shannon_env,
+            "Time": x_df["Time"],
+        }
+    )
+    return output_df
